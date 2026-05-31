@@ -1,10 +1,4 @@
-"""Run inference on the private test set and write a submission CSV.
-Usage:
-    python run_inference.py                  # -> ./submission.csv from data/private.jsonl
-    # or:
-    from run_inference import run_inference
-    run_inference()                          # defaults reproduce the 0.720 submission
-    run_inference(data_path=..., out_csv=..., model=...)
+"""Run inference on the private test set and write the submission to results/submission.csv.
 """
 import os
 # Portable HF cache + PyTorch-native sampler 
@@ -18,7 +12,7 @@ from pathlib import Path
 # ─── Best configuration 
 DEFAULT_MODEL   = "Qwen/Qwen3-4B-Thinking-2507-FP8"   
 DEFAULT_DATA    = "data/private.jsonl"                
-DEFAULT_OUT     = "submission.csv"
+DEFAULT_OUT     = "results/submission.csv"
 MAX_TOKENS      = 12288
 THINKING_BUDGET = 9000
 TEMPERATURE     = 0.6
@@ -26,8 +20,7 @@ TOP_P, TOP_K    = 0.95, 20
 GPU_MEM_UTIL    = 0.90
 
 # ─── Winning prompt (Variant "I"), inlined verbatim 
-# Free-form / math system prompt: plain-ASCII output matched to the grader, keep
-# pair/interval parens, >=12 significant figures, exact part-count.
+# Free-form / math system prompt: plain-ASCII output matched to the grader, keep pair/interval parentheses, >=12 significant figures, and exact part-count.
 SYSTEM_MATH = (
     "You are an expert mathematician. Solve the problem step-by-step. Before boxing, "
     "VERIFY your result: re-check the key steps and substitute the answer back in.\n"
@@ -79,6 +72,8 @@ _FORCE_CLOSE = ("\n\nI have used my reasoning budget. Based on the work above, "
                 "I will now state the final answer.\n</think>\n\n")
 
 
+
+
 def _build_messages(item: dict) -> list:
     """Chat messages for one question; MCQ prompt iff the item has answer options."""
     q = item["question"]
@@ -88,6 +83,7 @@ def _build_messages(item: dict) -> list:
         user = q + "\n\nOptions:\n" + "\n".join(f"{l}. {o.strip()}" for l, o in zip(labels, opts))
         return [{"role": "system", "content": SYSTEM_MCQ}, {"role": "user", "content": user}]
     return [{"role": "system", "content": SYSTEM_MATH}, {"role": "user", "content": q}]
+
 
 
 def _generate_two_phase(llm, prompts, budget, max_tokens, sampling_kwargs):
@@ -117,7 +113,10 @@ def _generate_two_phase(llm, prompts, budget, max_tokens, sampling_kwargs):
     out2 = llm.generate(phase2_prompts, p2)
     return [(thinking_blocks[i] + out2[i].outputs[0].text).strip() for i in range(len(prompts))]
 
-"""Full pipeline: load model -> build prompts -> two-phase generation -> write CSV. Returns the path to the written submission CSV
+
+
+
+"""Full pipeline: load model -> build prompts -> two-phase generation -> write results/submission.csv. Returns the path to the written submission CSV
 """
 def run_inference(
     data_path: str = DEFAULT_DATA,
@@ -143,34 +142,35 @@ def run_inference(
         for item in data
     ]
 
-    # 3 Size the KV-cache window from the longest prompt. Two-phase decoding feeds phase-1 thinking back in as phase-2's input, so window must cover prompt + max_tokens + close. VLLM crashes if not.
+    # 3 Size the KV-cache window from the longest prompt. Two-phase decoding feeds phase-1 thinking back in as phase-2's input, so window must cover prompt + max_tokens + close. VLLM crashes if not
     max_prompt_tokens = max(len(tokenizer(p).input_ids) for p in prompts)
     max_model_len = max(4096, max_prompt_tokens + max_tokens + 256)
     print(f"[run_inference] max_prompt_tokens={max_prompt_tokens} -> max_model_len={max_model_len}")
 
-    # 4 Load the FP8 model. vLLM reads the fp8 quantization_config straight from the checkpoint.
+    # 4 Load the FP8 model. vLLM reads the fp8 quantization_config straight from the checkpoint
     llm = LLM(
         model=model,
         gpu_memory_utilization=gpu_memory_utilization,
         max_model_len=max_model_len,
         trust_remote_code=True,
-        enable_prefix_caching=True,    # all prompts share the system prefix; phase-2 reuses phase-1 prefill
+        enable_prefix_caching=True,    # all prompts share the system prefix
         max_num_seqs=64,
     )
 
-    # 5 Two-phase thinking-budget generation (the only generation-feedback step).
+    # 5 Two-phase thinking-budget generation
     sampling_kwargs = dict(temperature=temperature, top_p=TOP_P, top_k=TOP_K)
     responses = _generate_two_phase(llm, prompts, thinking_budget, max_tokens, sampling_kwargs)
 
-    # 6 Write the submission CSV results/sample_submission.csv. The grader extracts \\boxed{} from the full response.
+    # 6 Write results/submission.csv. The grader extracts \\boxed{} from the full response
     pairs = sorted(zip(data, responses), key=lambda p: p[0]["id"])
     out_path = Path(out_csv)
+    out_path.parent.mkdir(parents=True, exist_ok=True)   # ensure results/ exists
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
         writer.writerow(["id", "response"])
         for item, resp in pairs:
             writer.writerow([item["id"], resp])
-    print(f"[run_inference] wrote {len(pairs)} rows -> {out_path.resolve()}")
+    print(f"[run_inference] wrote to {out_path.resolve()}")
     return str(out_path)
 
 

@@ -1,4 +1,4 @@
-# CSE 151B SP26 — Math Reasoning Competition
+# CSE 151B SP26: Math Reasoning Competition
 
 **Model-intrinsic only · zero training · leaderboard score = 0.720**
 
@@ -15,7 +15,7 @@ I maximize accuracy of the mandated base model **Qwen3-4B-Thinking-2507** using 
 If the model OOMs at load, lower `gpu_memory_utilization` (e.g. `run_inference(gpu_memory_utilization=0.80)`). On non-FP8 hardware, pass an unquantized checkpoint: `run_inference(model="Qwen/Qwen3-4B-Thinking-2507")`.
 
 
-## Model weights — setup
+## Model weights setup
 
 No manual download or placement is required. On the first call, vLLM automatically downloads `Qwen/Qwen3-4B-Thinking-2507-FP8` from the Hugging Face Hub.
 
@@ -29,7 +29,7 @@ pip install "vllm==0.21.0" transformers
 ```
 
 
-## Reproduce the submission
+## To reproduce the submission
 
 The 943-question test set is already included in this repo at `data/private.jsonl` (each line: `{"id", "question", "options"?}`), so no setup is needed. Run the single entry point in a terminal:
 
@@ -40,10 +40,10 @@ or from Python:
 ```python
 from run_inference import run_inference
 run_inference()                                            
-run_inference(data_path="data/private.jsonl", out_csv="submission.csv")
+run_inference(data_path="data/private.jsonl", out_csv="results/submission.csv")
 ```
 
-This writes **`submission.csv`**. 
+This writes **`results/submission.csv`**. 
 
 ## Repo contents
 
