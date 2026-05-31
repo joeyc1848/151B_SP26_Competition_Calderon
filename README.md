@@ -6,7 +6,7 @@ I maximize accuracy of the mandated base model **Qwen3-4B-Thinking-2507** using 
 
 ## Setup & inference time
 
-| **OS** | Linux or WSL2v required for vLLM |
+| **OS** | Linux or WSL2 required for vLLM |
 | **GPU** | Nividia card, RTX 4070 (12 GB) or higher. The default checkpoint is FP8-quantized |
 | **Inference time** | ~5 hours for the full 943-question private set (two-phase decode, 12288 tokens, FP8) |
 
