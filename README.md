@@ -7,7 +7,7 @@ I maximize accuracy of the mandated base model **Qwen3-4B-Thinking-2507** using 
 ## Setup & inference time
 
 | **OS** | Linux or WSL2v required for vLLM |
-| **GPU** | 1× CUDA NVIDIA GPU, **≥12 GB VRAM**. I used an **RTX 4070 (12 GB)**. The default checkpoint is FP8-quantized |
+| **GPU** | Nividia card, RTX 4070 (12 GB) or higher. The default checkpoint is FP8-quantized |
 | **Inference time** | ~5 hours for the full 943-question private set (two-phase decode, 12288 tokens, FP8) |
 
 If the model OOMs at load, lower `gpu_memory_utilization` (e.g. `run_inference(gpu_memory_utilization=0.80)`). On non-FP8 hardware, pass an unquantized checkpoint: `run_inference(model="Qwen/Qwen3-4B-Thinking-2507")`.
@@ -15,11 +15,11 @@ If the model OOMs at load, lower `gpu_memory_utilization` (e.g. `run_inference(g
 
 ## Model weights — setup
 
-No manual download or placement is required. On the first call, vLLM automatically downloads `Qwen/Qwen3-4B-Thinking-2507-FP8` (~5 GB) from the Hugging Face Hub.
+No manual download or placement is required. On the first call, vLLM automatically downloads `Qwen/Qwen3-4B-Thinking-2507-FP8` from the Hugging Face Hub.
 
 ## Install
 
-Requires **Python 3.10–3.12** and a working NVIDIA CUDA driver.
+Requires Python 3.10–3.12 and a working NVIDIA CUDA driver.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
