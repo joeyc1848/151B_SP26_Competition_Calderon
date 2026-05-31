@@ -43,14 +43,14 @@ run_inference()
 run_inference(data_path="data/private.jsonl", out_csv="results/submission.csv")
 ```
 
-This writes **`results/submission.csv`**. 
+This writes **`results/submission.csv`** (`id,response`, all 943 rows, `csv.QUOTE_MINIMAL`) 
 
 ## Repo contents
 
 | Path | Purpose |
 |---|---|
-| **`run_inference.py`** | Single, self-contained entry point: `run_inference()` → submission CSV (the 0.720 config). Needs only `vllm` + `transformers`; imports nothing else in this repo. |
-| `judger.py`, `utils.py` | Official grader for local scoring of free-form / MCQ answers against the labeled `public.jsonl` dev set. |
-| `data/` | `private.jsonl` (the test set `run_inference.py` reads) · `public.jsonl` (labeled dev set). |
-| `results/` | Output directory: generated submission CSVs land here; reproduce them by running `run_inference.py`. |
+| **`run_inference.py`** | Single, self-contained entry point: `run_inference()` → `results/submission.csv` (the 0.720 config). Needs only `vllm` + `transformers`; imports nothing else in this repo. |
+| `judger.py`, `utils.py` | Official grader (`Judger`, 1e-8 numeric tolerance) for local scoring of free-form / MCQ answers against the labeled `public.jsonl` dev set. |
+| `data/` | `private.jsonl` (943, the test set `run_inference.py` reads) · `public.jsonl` (1126, labeled dev set). |
+| `results/` | Output directory (empty but for `.gitkeep`): generated submission CSVs land here when you run `run_inference.py`. |
 | `LICENSE` · `.gitignore` | License and Git ignore rules. |
