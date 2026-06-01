@@ -38,7 +38,7 @@ VLLm is quite large, so please allow the package time to install to the venv.
 
 ## To reproduce the submission
 
-The 943-question test set is already included in this repo at `data/private.jsonl` (each line: `{"id", "question", "options"?}`), so no setup is needed. Run the single entry point in the same terminal with the virtual environment activated:
+The 943-question test set is already included in this repo at `data/private.jsonl`, so no setup is needed. If you wish to change the private set, replace the one contained in the repo with your desired .csv file and ensure its filepath matches the original. Run the single entry point in the same terminal with the virtual environment activated:
 
 ```bash
 python run_inference.py            
