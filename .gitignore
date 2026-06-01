@@ -7,3 +7,4 @@ PROJECT_SUMMARY.md
 results/*
 !results/.gitkeep
 make_submission.py
+presentation/
