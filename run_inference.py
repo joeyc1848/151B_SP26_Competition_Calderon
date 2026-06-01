@@ -1,7 +1,7 @@
 """Run inference on the private test set and write the submission to results/submission.csv.
 """
 import os
-# Portable HF cache + PyTorch-native sampler 
+# Set up HF cache and flashinfer
 os.environ.setdefault("HF_HOME", os.path.expanduser("~/.cache/huggingface"))
 os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 
@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 # ─── Best configuration 
+# Found that FP8 quantization was much faster on my GPU than INT4
 DEFAULT_MODEL   = "Qwen/Qwen3-4B-Thinking-2507-FP8"   
 DEFAULT_DATA    = "data/private.jsonl"                
 DEFAULT_OUT     = "results/submission.csv"
@@ -20,7 +21,7 @@ TOP_P, TOP_K    = 0.95, 20
 GPU_MEM_UTIL    = 0.90
 
 # ─── Winning prompt (Variant "I"), inlined verbatim 
-# Free-form / math system prompt: plain-ASCII output matched to the grader, keep pair/interval parentheses, >=12 significant figures, and exact part-count.
+# Free-form prompt: plain-ASCII output matched to judger.py, keep pair/interval parentheses, >=12 significant figures, and exact part-count.
 SYSTEM_MATH = (
     "You are an expert mathematician. Solve the problem step-by-step. Before boxing, "
     "VERIFY your result: re-check the key steps and substitute the answer back in.\n"
@@ -54,7 +55,7 @@ SYSTEM_MATH = (
     "nothing else — no words, units, explanations, alternative forms, or extra values. Recount the "
     "[ANS] blanks / asked quantities and make the number of comma-separated values match that count exactly."
 )
-# Multiple-choice system prompt: derive the answer first, then eliminate options.
+# MCQ prompt: derive the answer first, then eliminate options.
 SYSTEM_MCQ = (
     "You are an expert mathematician. Read the problem and the answer choices.\n"
     "FIRST, work out the answer YOURSELF before reading the options — derive it independently.\n"
@@ -67,15 +68,14 @@ SYSTEM_MCQ = (
     "Output ONLY the letter(s) inside exactly ONE \\boxed{}, with nothing else inside it, e.g. \\boxed{C}."
 )
 
-# Phase-2 trigger pulled when a question hits the thinking budget without closing </think>.
+# Phase-2 force-close prompt when a question hits the thinking budget without closing </think>.
 _FORCE_CLOSE = ("\n\nI have used my reasoning budget. Based on the work above, "
                 "I will now state the final answer.\n</think>\n\n")
 
 
 
-
+# Builds chat messages for one question. MCQ prompt iff the item has answer options
 def _build_messages(item: dict) -> list:
-    """Chat messages for one question; MCQ prompt iff the item has answer options."""
     q = item["question"]
     opts = item.get("options")
     if opts:
@@ -85,10 +85,9 @@ def _build_messages(item: dict) -> list:
     return [{"role": "system", "content": SYSTEM_MATH}, {"role": "user", "content": q}]
 
 
-
+# Enforces a thinking-token budget through two-phase generation.
 def _generate_two_phase(llm, prompts, budget, max_tokens, sampling_kwargs):
-    """Enforce a thinking-token budget via two-phase generation.
-
+    """
     Phase 1: generate up to `budget` tokens, stopping early if the model closes </think>.
     Phase 2: feed phase-1 thinking back in (injecting a forced close if the budget was hit mid-thought), then generate the final answer with the remaining tokens.
     Returns full responses (thinking + </think> + answer)
@@ -102,8 +101,11 @@ def _generate_two_phase(llm, prompts, budget, max_tokens, sampling_kwargs):
     for i, o in enumerate(out1):
         comp = o.outputs[0]
         thinking = comp.text
-        closed = (comp.stop_reason == "</think>")          # model closed </think> on its own
+
+        # check if model closed on its own
+        closed = (comp.stop_reason == "</think>")          
         closing = "</think>\n\n" if closed else _FORCE_CLOSE
+
         n_forced += (not closed)
         thinking_blocks.append(thinking + closing)
         phase2_prompts.append(prompts[i] + thinking + closing)
@@ -133,7 +135,6 @@ def run_inference(
 
     # 1 Load the private dataset
     data = [json.loads(l) for l in open(data_path, encoding="utf-8") if l.strip()]
-    print(f"[run_inference] {len(data)} questions from {data_path}  |  model={model}  "f"tokens={max_tokens}  budget={thinking_budget}  temp={temperature}")
 
     # 2 Build prompts (MCQ vs free-form chosen per item)
     tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
@@ -145,15 +146,14 @@ def run_inference(
     # 3 Size the KV-cache window from the longest prompt. Two-phase decoding feeds phase-1 thinking back in as phase-2's input, so window must cover prompt + max_tokens + close. VLLM crashes if not
     max_prompt_tokens = max(len(tokenizer(p).input_ids) for p in prompts)
     max_model_len = max(4096, max_prompt_tokens + max_tokens + 256)
-    print(f"[run_inference] max_prompt_tokens={max_prompt_tokens} -> max_model_len={max_model_len}")
 
-    # 4 Load the FP8 model. vLLM reads the fp8 quantization_config straight from the checkpoint
+    # 4 Load the model
     llm = LLM(
         model=model,
         gpu_memory_utilization=gpu_memory_utilization,
         max_model_len=max_model_len,
         trust_remote_code=True,
-        enable_prefix_caching=True,    # all prompts share the system prefix
+        enable_prefix_caching=True,
         max_num_seqs=64,
     )
 
@@ -164,11 +164,20 @@ def run_inference(
     # 6 Write results/submission.csv. The grader extracts \\boxed{} from the full response
     pairs = sorted(zip(data, responses), key=lambda p: p[0]["id"])
     out_path = Path(out_csv)
-    out_path.parent.mkdir(parents=True, exist_ok=True)   # ensure results/ exists
+    out_path.parent.mkdir(parents=True, exist_ok=True)   
+
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
         writer.writerow(["id", "response"])
         for item, resp in pairs:
+            writer.writerow([item["id"], resp])
+    print(f"[run_inference] wrote to {out_path.resolve()}")
+    return str(out_path)
+
+
+if __name__ == "__main__":
+    run_inference()
+
             writer.writerow([item["id"], resp])
     print(f"[run_inference] wrote to {out_path.resolve()}")
     return str(out_path)
