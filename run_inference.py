@@ -177,11 +177,3 @@ def run_inference(
 
 if __name__ == "__main__":
     run_inference()
-
-            writer.writerow([item["id"], resp])
-    print(f"[run_inference] wrote to {out_path.resolve()}")
-    return str(out_path)
-
-
-if __name__ == "__main__":
-    run_inference()
